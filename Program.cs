@@ -1,229 +1,213 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 class Program
 {
-    const float Gravity = .5f;
-    const int PipeWidth = 8;
-    const int PipeGapHeight = 6;
-    const int SpaceBetweenPipes = 45;
-    const string BirdUp = @"~(v')>";
-    const string BirdDown = @"~(^')>";
+    public class Ball
+    {
+        public float X;
+        public float Y;
+        public float dX;
+        public float dY;
+    }
 
-    static readonly int OriginalWidth = Console.WindowWidth;
-    static readonly int OriginalHeight = Console.WindowHeight;
-    static readonly bool OriginalCursorVisible = GetConsoleCursorVisible();
-
-    static readonly TimeSpan Sleep = TimeSpan.FromMilliseconds(90);
-    static readonly Random Random = new Random();
-    static readonly List<(int X, int GapY)> Pipes = new List<(int, int)>();
-
-    static int Width;
-    static int Height;
-    static float BirdX;
-    static float BirdY;
-    static float BirdDY;
-    static int Frame;
-    static int PipeFrame;
+    static readonly int width = Console.WindowWidth;
+    static readonly int height = Console.WindowHeight;
+    static readonly float multiplier = 2.1f;
+    static readonly Random random = new Random();
+    static readonly TimeSpan delay = TimeSpan.FromMilliseconds(10);
+    static readonly TimeSpan enemyInputDelay = TimeSpan.FromMilliseconds(100);
+    static readonly int paddleSize = height / 4;
+    static readonly Stopwatch stopwatch = new Stopwatch();
+    static readonly Stopwatch enemyStopwatch = new Stopwatch();
+    static int scoreA = 0;
+    static int scoreB = 0;
+    static Ball ball;
+    static int paddleA = height / 3;
+    static int paddleB = height / 3;
 
     static void Main()
     {
-        try
+        Console.Clear();
+        stopwatch.Restart();
+        enemyStopwatch.Restart();
+        Console.CursorVisible = false;
+        while (scoreA < 3 && scoreB < 3)
         {
-        PlayAgain:
-            Console.Clear();
-            Pipes.Clear();
-            try
-            {
-                Width = Console.WindowWidth = 120;
-                Height = Console.WindowHeight = 30;
-            }
-            catch (PlatformNotSupportedException)
-            {
-                //if not Windows OS
-                Width = Console.WindowWidth;
-                Height = Console.WindowHeight;
-            }
-            BirdX = Width / 6;
-            BirdY = Height / 2;
-            BirdDY = 0;
-            Frame = 0;
-            PipeFrame = SpaceBetweenPipes;
-            Console.CursorVisible = false;
-            // Starting Input
-            RenderBird();
-            Console.SetCursorPosition((int)BirdX - 10, (int)BirdY + 1);
-            Console.Write("Press Space To Flap");
-        StartingInput:
-            switch (Console.ReadKey(true).Key)
-            {
-                case ConsoleKey.Spacebar:
-                    BirdDY = -2;
-                    break;
-                case ConsoleKey.Escape:
-                    Console.Clear();
-                    Console.Write("Flappy Bird was closed.");
-                    return;
-                default:
-                    goto StartingInput;
-            }
-            Console.SetCursorPosition((int)BirdX - 10, (int)BirdY + 1);
-            Console.Write("                   ");
-            // Game Loop
+            ball = CreateNewBall();
             while (true)
             {
-                // Check For Game Over
-                if (Console.WindowHeight != Height || Console.WindowWidth != Width)
+                #region Update Ball
+
+                // Compute Time And New Ball Position
+                float time = (float)stopwatch.Elapsed.TotalSeconds * 25;
+                var (X2, Y2) = (ball.X + (time * ball.dX), ball.Y + (time * ball.dY));
+
+                // Collisions With Up/Down Walls
+                if (Y2 < 0 || Y2 > height)
                 {
-                    Console.Clear();
-                    Console.Write("You resized the console. Flappy Bird was closed.");
-                    return;
+                    ball.dY = -ball.dY;
+                    Y2 = ball.Y + ball.dY;
                 }
-                if (Frame == int.MaxValue)
+
+                // Collision With Paddle A
+                if (Math.Min(ball.X, X2) <= 2 && 2 <= Math.Max(ball.X, X2))
                 {
-                    Console.SetCursorPosition(0, Height - 1);
-                    Console.Write("You win! Score: " + Frame + ".");
+                    int ballPathAtPaddleA = height - (int)GetLineValue(((ball.X, height - ball.Y), (X2, height - Y2)), 2);
+                    ballPathAtPaddleA = Math.Max(0, ballPathAtPaddleA);
+                    ballPathAtPaddleA = Math.Min(height - 1, ballPathAtPaddleA);
+                    if (paddleA <= ballPathAtPaddleA && ballPathAtPaddleA <= paddleA + paddleSize)
+                    {
+                        ball.dX = -ball.dX;
+                        ball.dX *= multiplier;
+                        ball.dY *= multiplier;
+                        X2 = ball.X + (time * ball.dX);
+                    }
+                }
+
+                // Collision With Paddle B
+                if (Math.Min(ball.X, X2) <= width - 2 && width - 2 <= Math.Max(ball.X, X2))
+                {
+                    int ballPathAtPaddleB = height - (int)GetLineValue(((ball.X, height - ball.Y), (X2, height - Y2)), width - 2);
+                    ballPathAtPaddleB = Math.Max(0, ballPathAtPaddleB);
+                    ballPathAtPaddleB = Math.Min(height - 1, ballPathAtPaddleB);
+                    if (paddleB <= ballPathAtPaddleB && ballPathAtPaddleB <= paddleB + paddleSize)
+                    {
+                        ball.dX = -ball.dX;
+                        ball.dX *= multiplier;
+                        ball.dY *= multiplier;
+                        X2 = ball.X + (time * ball.dX);
+                    }
+                }
+
+                // Collisions With Left/Right Walls
+                if (X2 < 0)
+                {
+                    scoreB++;
                     break;
                 }
-                if (!(BirdY < Height - 1 && BirdY > 0) || IsBirdCollidingWithPipe())
+                if (X2 > width)
                 {
-                    Console.SetCursorPosition(0, Height - 1);
-                    Console.Write("Game Over. Score: " + Frame + ".");
-                    Console.Write(" Play Again [enter], or quit [escape]?");
-                GetPlayAgainInput:
-                    ConsoleKey key = Console.ReadKey(true).Key;
-                    if (key is ConsoleKey.Enter)
-                    {
-                        goto PlayAgain;
-                    }
-                    else if (!(key is ConsoleKey.Escape))
-                    {
-                        goto GetPlayAgainInput;
-                    }
-                    Console.Clear();
+                    scoreA++;
                     break;
                 }
-                // Updates
+
+                // Updating Ball Position
+                Console.SetCursorPosition((int)ball.X, (int)ball.Y);
+                Console.Write(' ');
+                ball.X += time * ball.dX;
+                ball.Y += time * ball.dY;
+                Console.SetCursorPosition((int)ball.X, (int)ball.Y);
+                Console.Write('O');
+
+                #endregion
+
+                #region Update Player Paddle
+
+                if (Console.KeyAvailable)
                 {
-                    // Pipes
+                    switch (Console.ReadKey(true).Key)
                     {
-                        // Erase (previous frame)
-                        foreach (var pipe in Pipes)
-                        {
-                            int x = pipe.X + PipeWidth / 2;
-                            if (x >= 0 && x < Width)
-                            {
-                                for (int y = 0; y < Height; y++)
-                                {
-                                    Console.SetCursorPosition(x, y);
-                                    Console.Write(' ');
-                                }
-                            }
-                        }
-                        // Update
-                        for (int i = 0; i < Pipes.Count; i++)
-                        {
-                            Pipes[i] = (Pipes[i].X - 1, Pipes[i].GapY);
-                        }
-                        if (Pipes.Count > 0 && Pipes[0].X < -PipeWidth)
-                        {
-                            Pipes.RemoveAt(0);
-                        }
-                        if (PipeFrame >= SpaceBetweenPipes)
-                        {
-                            int gapY = Random.Next(0, Height - PipeGapHeight - 1 - 6) + 3;
-                            Pipes.Add((Width + PipeWidth / 2, gapY));
-                            PipeFrame = 0;
-                        }
-                        // Render (current frame)
-                        foreach (var pipe in Pipes)
-                        {
-                            int x = pipe.X - PipeWidth / 2;
-                            for (int y = 0; y < Height; y++)
-                            {
-                                if (x > 0 && x < Width - 1 && (y < pipe.GapY || y > pipe.GapY + PipeGapHeight))
-                                {
-                                    Console.SetCursorPosition(x, y);
-                                    Console.Write('█');
-                                }
-                            }
-                        }
-                        RenderBird();
-                        PipeFrame++;
+                        case ConsoleKey.UpArrow: paddleA = Math.Max(paddleA - 1, 0); break;
+                        case ConsoleKey.DownArrow: paddleA = Math.Min(paddleA + 1, height - paddleSize - 1); break;
+                        case ConsoleKey.Escape:
+                            Console.Clear();
+                            Console.Write("Pong was closed.");
+                            return;
                     }
-                    // Bird
-                    {
-                        // Erase (previous frame)
-                        {
-                            bool verticalVelocity = BirdDY < 0;
-                            Console.SetCursorPosition((int)(BirdX) - 3, (int)BirdY);
-                            Console.Write("      ");
-                        }
-                        // Update
-                        while (Console.KeyAvailable)
-                        {
-                            switch (Console.ReadKey(true).Key)
-                            {
-                                case ConsoleKey.Spacebar:
-                                    BirdDY = -2;
-                                    break;
-                                case ConsoleKey.Escape:
-                                    Console.Clear();
-                                    Console.Write("Flappy Bird was closed.");
-                                    return;
-                            }
-                        }
-                        BirdY += BirdDY;
-                        BirdDY += Gravity;
-                        // Render (current frame)
-                        RenderBird();
-                    }
-                    Frame++;
                 }
-                Thread.Sleep(Sleep);
+                while (Console.KeyAvailable)
+                {
+                    Console.ReadKey(true);
+                }
+
+                #endregion
+
+                #region Update Computer Paddle
+
+                if (enemyStopwatch.Elapsed > enemyInputDelay)
+                {
+                    if (ball.Y < paddleB + (paddleSize / 2) && ball.dY < 0)
+                    {
+                        paddleB = Math.Max(paddleB - 1, 0);
+                    }
+                    else if (ball.Y > paddleB + (paddleSize / 2) && ball.dY > 0)
+                    {
+                        paddleB = Math.Min(paddleB + 1, height - paddleSize - 1);
+                    }
+                    enemyStopwatch.Restart();
+                }
+
+                #endregion
+
+                #region Render Paddles
+
+                for (int i = 0; i < height; i++)
+                {
+                    Console.SetCursorPosition(2, i);
+                    Console.Write(paddleA <= i && i <= paddleA + paddleSize ? '█' : ' ');
+                    Console.SetCursorPosition(width - 2, i);
+                    Console.Write(paddleB <= i && i <= paddleB + paddleSize ? '█' : ' ');
+                }
+
+                #endregion
+
+                stopwatch.Restart();
+                Thread.Sleep(delay);
             }
+            Console.SetCursorPosition((int)ball.X, (int)ball.Y);
+            Console.Write(' ');
         }
-        finally
+        Console.Clear();
+        if (scoreA > scoreB)
         {
-            Console.CursorVisible = OriginalCursorVisible;
-            Console.WindowWidth = OriginalWidth;
-            Console.WindowHeight = OriginalHeight;
+            Console.Write("You win.");
+        }
+        if (scoreA > scoreB)
+        {
+            Console.Write("You lose.");
         }
     }
 
-    public static bool IsBirdCollidingWithPipe()
+    static Ball CreateNewBall()
     {
-        foreach (var pipe in Pipes)
+        float randomFloat = (float)random.NextDouble() * 0.9f;
+        float dx = Math.Max(randomFloat, 1f - randomFloat);
+        float dy = 1f - dx;
+        float x = width / 2;
+        float y = height / 2;
+        if (random.Next(2) == 0)
         {
-            if (Math.Abs(pipe.X - BirdX) < PipeWidth / 2 + 3 && ((int)BirdY < pipe.GapY || (int)BirdY > pipe.GapY + PipeGapHeight))
-            {
-                return true;
-            }
+            dx = -dx;
         }
-        return false;
+        if (random.Next(2) == 0)
+        {
+            dy = -dy;
+        }
+        return ball = new Ball
+        {
+            X = x,
+            Y = y,
+            dX = dx,
+            dY = dy,
+        };
     }
 
-    public static void RenderBird()
+    static float GetLineValue(((float X, float Y) A, (float X, float Y) B) line, float x)
     {
-        if ((int)BirdY < Height - 1 && (int)BirdY >= 0)
+        // order points from least to greatest X
+        if (line.B.X < line.A.X)
         {
-            bool verticalVelocity = BirdDY < 0;
-            Console.SetCursorPosition((int)BirdX - 3, (int)BirdY);
-            Console.Write(verticalVelocity ? BirdUp : BirdDown);
+            var temp = line.B;
+            line.B = line.A;
+            line.A = temp;
         }
-    }
-
-    static bool GetConsoleCursorVisible()
-    {
-        try
-        {
-            return Console.CursorVisible;
-        }
-        catch (PlatformNotSupportedException)
-        {
-            // if non-Windows OS
-            return true;
-        }
+        // find the slope
+        float slope = (line.B.X - line.A.X) / (line.B.Y - line.A.Y);
+        // find the y-intercept
+        float yIntercept = line.A.Y - line.A.X * slope;
+        // find the function's value at parameter "x"
+        return x * slope + yIntercept;
     }
 }
