@@ -34,8 +34,8 @@ namespace ChessCe
 
         private void getInput()
         {
-                                                                                                         //get input and validate it
-                                                                                                         //the program runs until user enters invalid input.
+           /*get input and validate it
+             the program runs until user enters invalid input*/
             Console.WriteLine("Enter Target's X axis");
             Exit = validateInput(int.TryParse(Console.ReadLine(), out targetX));
 
