@@ -17,7 +17,21 @@ namespace ChessCe
         public Pawn()
         {
             pawns = new char[ChessBoard.DIMENSION, ChessBoard.DIMENSION];
-            initPawn();           //populate pawn array with X and Spaces
+            initPawn();
+        }
+        
+        private void initPawn()
+        {
+            for (int r = 0; r < ChessBoard.DIMENSION; r++)
+            {
+                for (int c = 0; c < ChessBoard.DIMENSION; c++)
+                {
+                    if (r == 0 || r == 1 || r == ChessBoard.DIMENSION - 2 || r == ChessBoard.DIMENSION - 1)
+                        pawns[r, c] = PAWN_SYMBOL;
+                    else
+                        pawns[r, c] = SPACE;
+                }
+            }
         }
     }
 }
