@@ -1,2 +1,2 @@
-# Chess
-Making a 2d chess and then 3d, a great start for making turn based games.
+# Console games
+Making some console games before trying to go in for turn based strategies.
