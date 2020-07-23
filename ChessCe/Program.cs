@@ -10,7 +10,8 @@ namespace ChessCe
   {
     static void Main(string[] args)
     {
-
+      ChessBoard chessBoard = new ChessBoard();
+      chessBoard.displayChessBoard();
     }
   }
 }
